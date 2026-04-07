@@ -1,0 +1,13 @@
+create table profiles (id uuid references auth.users primary key, username text unique not null, created_at timestamp default now());
+create table notes (id uuid default gen_random_uuid() primary key, user_id uuid references profiles(id) not null, content text not null, created_at timestamp default now());
+create table messages (id uuid default gen_random_uuid() primary key, sender_id uuid references profiles(id) not null, receiver_id uuid references profiles(id) not null, content text not null, created_at timestamp default now());
+alter table profiles enable row level security;
+alter table notes enable row level security;
+alter table messages enable row level security;
+create policy "p1" on profiles for select using (true);
+create policy "p2" on profiles for insert with check (auth.uid() = id);
+create policy "p3" on notes for select using (true);
+create policy "p4" on notes for insert with check (auth.uid() = user_id);
+create policy "p5" on notes for delete using (auth.uid() = user_id);
+create policy "p6" on messages for select using (auth.uid() = sender_id or auth.uid() = receiver_id);
+create policy "p7" on messages for insert with check (auth.uid() = sender_id);
