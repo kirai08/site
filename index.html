@@ -825,10 +825,29 @@ function tickTimer() {
   if (!timerState) return;
   const now = Date.now();
   const elapsed = Math.floor((now - timerState.pageStartTime) / 1000);
-  const remaining = timerState.timePerPage - elapsed;
+  const remaining = timerState.isBreak
+    ? timerState.breakTime - elapsed
+    : timerState.timePerPage - elapsed;
 
   updateTimerDisplay(remaining);
-  recordStudyTime();
+
+  if (!timerState.isBreak) {
+    recordStudyTime();
+  }
+
+  // 休憩終了 → 自動で次のページへ
+  if (timerState.isBreak && remaining <= 0) {
+    if (Notification.permission === 'granted') {
+      new Notification("☕ 休憩終了！次のページへ");
+    }
+    timerState.currentPage++;
+    timerState.isBreak = false;
+    timerState.pageStartTime = Date.now();
+    saveTimerState();
+    if (timerState.currentPage > timerState.totalPages) {
+      completeSession();
+    }
+  }
 }
 
 let lastRecordedSecond = -1;
@@ -861,8 +880,8 @@ function updateTimerDisplay(remaining) {
   if (timerState.isBreak) {
     disp.className = "timer-display break";
     status.textContent = "☕ 休憩中";
-    disp.textContent = fmt(remaining);
-    const pct = Math.max(0, (remaining / timerState.breakTime) * 100);
+    disp.textContent = fmt(Math.max(0, remaining));
+    const pct = timerState.breakTime > 0 ? Math.max(0, (remaining / timerState.breakTime) * 100) : 0;
     progress.style.width = pct + "%";
   } else if (remaining < 0) {
     disp.className = "timer-display overtime";
@@ -882,21 +901,32 @@ function finish() {
   if (!timerState) return;
 
   if (!timerState.isBreak) {
-    // 休憩へ
+    // 経過時間を計算して残り時間を休憩時間にする
+    const now = Date.now();
+    const elapsed = Math.floor((now - timerState.pageStartTime) / 1000);
+    const remaining = timerState.timePerPage - elapsed;
+    const breakTime = Math.max(0, remaining); // 残り時間が休憩時間
+
     timerState.isBreak = true;
-    timerState.breakTime = Math.floor(timerState.timePerPage * 0.2); // 20%休憩
+    timerState.breakTime = breakTime;
     timerState.pageStartTime = Date.now();
     saveTimerState();
+
+    // 休憩時間が0なら即次のページへ
+    if (breakTime <= 0) {
+      timerState.currentPage++;
+      timerState.isBreak = false;
+      timerState.pageStartTime = Date.now();
+      saveTimerState();
+      if (timerState.currentPage > timerState.totalPages) completeSession();
+    }
   } else {
-    // 次のページへ
+    // 手動で休憩スキップ
     timerState.currentPage++;
     timerState.isBreak = false;
     timerState.pageStartTime = Date.now();
     saveTimerState();
-
-    if (timerState.currentPage > timerState.totalPages) {
-      completeSession();
-    }
+    if (timerState.currentPage > timerState.totalPages) completeSession();
   }
 }
 
